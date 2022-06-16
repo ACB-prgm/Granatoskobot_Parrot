@@ -5,7 +5,7 @@
 #define RUN 1
 #define PPR 4560.0 
 #define cm_PER_ROT 6.28
-#define MAX_SPEED 25  // THE MAX SPEED THE ENCODER CAN ~ACCURATELY READ AT
+#define MAX_PWM 50  // THE MAX SPEED THE ENCODER CAN ~ACCURATELY READ AT
 #define test_motor 0
 
 int MOTORS[3][6] = {
@@ -68,7 +68,7 @@ float get_motor_dist(int motor_pin){
 void setup() {
   Serial.begin(2000000); // MUST CHANGE IN .ini FILE TO VIEW IN SERIAL MONITOR
   if (RUN) {
-    run_motor(test_motor, 0, MAX_SPEED);
+    run_motor(test_motor, 0, MAX_PWM);
   }
 }
 

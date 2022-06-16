@@ -21,15 +21,15 @@ void run_motor(int motor_pin, int dir, int pwm_val) {
 void record_pulses() {
   static int last_encs[3] = {3, 3, 3};
 
-  int encs[3][2] = {
-    {digitalRead(MOTORS[0][2]), digitalRead(MOTORS[0][3])},
-    {digitalRead(MOTORS[1][2]), digitalRead(MOTORS[1][3])},
-    {digitalRead(MOTORS[2][2]), digitalRead(MOTORS[2][3])}
+  int encs[3] = {
+    digitalRead(MOTORS[0][2]) + digitalRead(MOTORS[0][3]),
+    digitalRead(MOTORS[1][2]) + digitalRead(MOTORS[1][3]),
+    digitalRead(MOTORS[2][2]) + digitalRead(MOTORS[2][3])
     };
   
   for (int i=0; i<3; i++) {
     int last_enc = last_encs[i];
-    int enc = encs[i][0] + encs[i][1];
+    int enc = encs[i];
 
     if (enc != last_enc) {
       MOTORS[i][5] += 1;

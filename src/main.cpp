@@ -6,7 +6,7 @@
 #define PPR 4560.0 
 #define cm_PER_ROT 6.28
 #define MAX_PWM 50  // THE MAX SPEED THE ENCODER CAN ~ACCURATELY READ AT
-#define test_motor 0
+#define test_motor 1
 
 int MOTORS[3][6] = {
   {7, 4, 48, 49, 0, 0}, // MOTOR 1, PHASE_PIN, EN_PIN, ENC-A, ENC-B, DIRECTION, NUM_PULSES
@@ -44,8 +44,8 @@ void record_pulses() {
       last_encs[i] = enc;
     };
   }
-
-  Serial.println();
+  // Serial.print(digitalRead(MOTORS[test_motor][2]));
+  // Serial.println(digitalRead(MOTORS[test_motor][3]));
 }
 
 float get_motor_rotations(int motor_pin) {
@@ -78,12 +78,12 @@ void loop() {
 
     record_pulses();
 
-    if (MOTORS[test_motor][5] >= PPR){
+    if (MOTORS[test_motor][5] >= PPR/2 || millis() > 20000){
       analogWrite(MOTORS[test_motor][1], 0);
       exit(0);
     }
-    Serial.print(get_motor_angle(test_motor));
-    Serial.print("º | cm = ");
-    Serial.println(get_motor_dist(test_motor));
+    // Serial.print(get_motor_angle(test_motor));
+    // Serial.print("º | cm = ");
+    // Serial.println(get_motor_dist(test_motor));
   }
 }

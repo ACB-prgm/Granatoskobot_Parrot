@@ -1,17 +1,29 @@
 #include <Arduino.h>
+#include <math.h>
 
 
 // GLOBALS
 #define RUN 1
-#define PPR 4560.0 
-#define cm_PER_ROT 6.28
+#define PPR 3576.0 
+#define mm_PER_ROT 62.8
 #define MAX_PWM 50  // THE MAX SPEED THE ENCODER CAN ~ACCURATELY READ AT
-#define test_motor 1
+#define test_motor 2
+#define TEST_LIMIT_ANGLE 360
 
-int MOTORS[3][6] = {
-  {7, 4, 48, 49, 0, 0}, // MOTOR 1, PHASE_PIN, EN_PIN, ENC-A, ENC-B, DIRECTION, NUM_PULSES
-  {6, 3, 50, 51, 0, 0},
-  {5, 2, 52, 53, 0, 0},
+#define d 57.0 // mm constant representing the distance between the rods and virtual backbone
+#define kmax 500 // mm max curvature of virtual backbone
+
+// s1,s2,s3 are the length of each rod i (i =1,2,3)
+// S is the length of the virtual backbone
+// k is the arclength curvature of the virtual backbone path ()= 1 / radius of curvature)
+// phi direction of curvature
+float HEAD_COORDS[3] = {0, 0, 0}; // x, y, z
+float RODS_DESIRED[6] = {0, 0, 0, 0, 0, 0}; // 0:s1, 1:s2, 2:s3, 3:S, 4:k, 5:phi
+float RODS[6] = {0, 0, 0, 0, 0, 0}; // 0:s1, 1:s2, 2:s3, 3:S, 4:k, 5:phi
+float MOTORS[3][6] = {
+  {7, 4, 48, 49, 0.5, 0}, // MOTOR 1, PHASE_PIN, EN_PIN, ENC-A, ENC-B, DIRECTION, NUM_PULSES
+  {6, 3, 50, 51, 0.5, 0},
+  {5, 2, 52, 53, 0.5, 0},
 };
 
 
@@ -40,7 +52,7 @@ void record_pulses() {
     int enc = encs[i];
 
     if (enc != last_enc) {
-      MOTORS[i][5] += 1 - (2 * MOTORS[i][4]); // left rotation decrements, right increments pulses
+      MOTORS[i][5] += (2 * MOTORS[i][4]) - 1; // left rotation decrements, right increments pulses
       last_encs[i] = enc;
     };
   }
@@ -50,6 +62,10 @@ void record_pulses() {
 
 float get_motor_rotations(int motor_pin) {
   // RETURNS THE NUMBER OF REVOLUTIONS FROM THE ORIGIN 
+  // Serial.println(MOTORS[motor_pin][5]);
+  if (MOTORS[motor_pin][5] == 0.0) {
+    return 0.0;
+  }
   return (MOTORS[motor_pin][5] /  PPR); // (NUM_PULSES / PPR)
 }
 
@@ -60,16 +76,37 @@ float get_motor_angle(int motor_pin) {
 
 float get_motor_dist(int motor_pin){
   // RETURNS THE DISTANCE (cm) FROM THE ORIGIN THE "MOTOR" HAS TRAVELED (IE THE ROD IN OUR CASE)
-  return get_motor_rotations(motor_pin) * cm_PER_ROT; // NUM_ROTATIONS * ~CIRCUMFERENCE
+  return get_motor_rotations(motor_pin) * mm_PER_ROT; // NUM_ROTATIONS * ~CIRCUMFERENCE
 }
+
+void inv_kin() {
+    RODS_DESIRED[0] = 1 + d * RODS_DESIRED[4] * cos(RODS_DESIRED[5]);
+    RODS_DESIRED[1] = 1 - RODS_DESIRED[4] * d * sin(M_PI/6 - RODS_DESIRED[5]);
+    RODS_DESIRED[2] = 1 - RODS_DESIRED[4] * d * sin(M_PI/6 + RODS_DESIRED[5]);
+}
+
+void set_desired_from_input(float Sin, float Kfbin, float Klrin){
+    RODS_DESIRED[3] = Sin;
+    RODS_DESIRED[4] = min(sqrt(pow(Kfbin, 2) + pow(Klrin, 2)), kmax);
+    RODS_DESIRED[5] = atan2(Klrin, Kfbin);
+
+    inv_kin();
+}
+
+void find_head_coords(){
+    float val = 1 - cos(RODS[4] * RODS[3]);
+
+    HEAD_COORDS[0] = val * cos(RODS[5]);
+    HEAD_COORDS[1] = val * sin(RODS[5]);
+    HEAD_COORDS[2] = sin(RODS[4] * RODS[3]);
+  }
 
 
 // VIRTUAL FUNCTIONS
 void setup() {
   Serial.begin(2000000); // MUST CHANGE IN .ini FILE TO VIEW IN SERIAL MONITOR
-  if (RUN) {
-    run_motor(test_motor, 0, MAX_PWM);
-  }
+
+  set_desired_from_input(10, 1, 1);
 }
 
 
@@ -78,8 +115,28 @@ void loop() {
 
     record_pulses();
 
-    if (MOTORS[test_motor][5] >= PPR/2 || millis() > 20000){
-      analogWrite(MOTORS[test_motor][1], 0);
+    for (int i=0; i<3; i++) {
+      float rod_length = get_motor_dist(i);
+      Serial.println(RODS_DESIRED[i]);
+      if (rod_length < RODS_DESIRED[i]) {
+        run_motor(i, 1, MAX_PWM); // EXTEND
+      }
+      else if (rod_length > RODS_DESIRED[i]) {
+        run_motor(i, 0, MAX_PWM); // RETRACT
+      }
+      else {
+        run_motor(i, 0, 0); // STOP
+      }
+
+      RODS[i] = rod_length;
+    };
+
+
+
+    if (millis() > 10000){
+      for (int i=0; i<3; i++) {
+        run_motor(i, 0, 0);
+      }
       exit(0);
     }
     // Serial.print(get_motor_angle(test_motor));

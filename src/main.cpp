@@ -2,14 +2,12 @@
 #include <math.h>
 
 
-// GLOBALS
+// GLOBALS ——————————————————————————————————————————————————————————————————————————————————————————
 #define RUN 1
 #define PPR 3576.0 
 #define mm_PER_ROT 62.8
-#define MAX_PWM 50  // THE MAX SPEED THE ENCODER CAN ~ACCURATELY READ AT
-#define test_motor 2
-#define TEST_LIMIT_ANGLE 360
-
+#define MAX_PWM 200  // THE MAX SPEED THE ENCODER CAN ~ACCURATELY READ AT
+#define test_motor 0
 #define d 57.0 // mm constant representing the distance between the rods and virtual backbone
 #define kmax 500 // mm max curvature of virtual backbone
 
@@ -17,17 +15,37 @@
 // S is the length of the virtual backbone
 // k is the arclength curvature of the virtual backbone path ()= 1 / radius of curvature)
 // phi direction of curvature
+const String ENC_READS[4] = {"11", "01", "00", "10"};
 float HEAD_COORDS[3] = {0, 0, 0}; // x, y, z
 float RODS_DESIRED[6] = {0, 0, 0, 0, 0, 0}; // 0:s1, 1:s2, 2:s3, 3:S, 4:k, 5:phi
 float RODS[6] = {0, 0, 0, 0, 0, 0}; // 0:s1, 1:s2, 2:s3, 3:S, 4:k, 5:phi
 float MOTORS[3][6] = {
-  {7, 4, 48, 49, 0.5, 0}, // MOTOR 1, PHASE_PIN, EN_PIN, ENC-A, ENC-B, DIRECTION, NUM_PULSES
-  {6, 3, 50, 51, 0.5, 0},
-  {5, 2, 52, 53, 0.5, 0},
+  {9, 6, 2, 3, 0.5, 0}, // MOTOR 1, PHASE_PIN, EN_PIN, ENC-A, ENC-B, 4:DIRECTION, 5:NUM_PULSES
+  {8, 5, 18, 19, 0.5, 0},
+  {7, 4, 20, 21, 0.5, 0},
+};
+int ENCODERS[3][2] = {
+  {digitalRead(MOTORS[0][2]), digitalRead(MOTORS[0][3])},
+  {digitalRead(MOTORS[1][2]), digitalRead(MOTORS[1][3])},
+  {digitalRead(MOTORS[2][2]), digitalRead(MOTORS[2][3])}
 };
 
 
-// CUSTOM FUNCTIONS
+// ISRs ——————————————————————————————————————————————————————————————————————————————————————————
+void rec_enc_00(){
+  MOTORS[0][5] += 1;
+};
+
+void rec_enc_01(){
+  MOTORS[1][5] += 1;
+};
+
+void rec_enc_02(){
+  MOTORS[2][5] += 1;
+};
+
+
+// CUSTOM FUNCTIONS ——————————————————————————————————————————————————————————————————————————————————————————
 void run_motor(int motor_pin, int dir, int pwm_val) {
   // MOVES MOTOR IN DIRECTION
   analogWrite(MOTORS[motor_pin][1], pwm_val);
@@ -46,7 +64,7 @@ void record_pulses() {
     digitalRead(MOTORS[1][2]) + digitalRead(MOTORS[1][3]),
     digitalRead(MOTORS[2][2]) + digitalRead(MOTORS[2][3])
     };
-  
+    
   for (int i=0; i<3; i++) {
     int last_enc = last_encs[i];
     int enc = encs[i];
@@ -56,8 +74,8 @@ void record_pulses() {
       last_encs[i] = enc;
     };
   }
-  // Serial.print(digitalRead(MOTORS[test_motor][2]));
-  // Serial.println(digitalRead(MOTORS[test_motor][3]));
+  Serial.print(digitalRead(MOTORS[test_motor][2]));
+  Serial.println(digitalRead(MOTORS[test_motor][3]));
 }
 
 float get_motor_rotations(int motor_pin) {
@@ -102,22 +120,27 @@ void find_head_coords(){
   }
 
 
-// VIRTUAL FUNCTIONS
+// VIRTUAL FUNCTIONS ——————————————————————————————————————————————————————————————————————————————————————————
 void setup() {
   Serial.begin(2000000); // MUST CHANGE IN .ini FILE TO VIEW IN SERIAL MONITOR
+
+  attachInterrupt(digitalPinToInterrupt(MOTORS[0][2]), rec_enc_00, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(MOTORS[0][3]), rec_enc_00, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(MOTORS[1][2]), rec_enc_01, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(MOTORS[1][3]), rec_enc_01, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(MOTORS[2][2]), rec_enc_02, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(MOTORS[2][3]), rec_enc_02, CHANGE);
 
   set_desired_from_input(10, 1, 1);
 }
 
-
 void loop() {
   if(RUN){
-
-    record_pulses();
-
     for (int i=0; i<3; i++) {
-      float rod_length = get_motor_dist(i);
+      Serial.print(i);
+      Serial.print(": ");
       Serial.println(RODS_DESIRED[i]);
+      float rod_length = get_motor_dist(i);
       if (rod_length < RODS_DESIRED[i]) {
         run_motor(i, 1, MAX_PWM); // EXTEND
       }
@@ -125,6 +148,7 @@ void loop() {
         run_motor(i, 0, MAX_PWM); // RETRACT
       }
       else {
+        rod_length = RODS_DESIRED[i];
         run_motor(i, 0, 0); // STOP
       }
 
@@ -135,6 +159,7 @@ void loop() {
 
     if (millis() > 10000){
       for (int i=0; i<3; i++) {
+        Serial.println("###### TIMEOUT ######");
         run_motor(i, 0, 0);
       }
       exit(0);
